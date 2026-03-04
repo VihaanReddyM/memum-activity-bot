@@ -78,10 +78,6 @@ mod tests {
         XPConfig::default()
     }
 
-    // ---------------------------------------------------------------
-    // calculate_xp tests
-    // ---------------------------------------------------------------
-
     #[test]
     fn xp_no_deltas_returns_zero() {
         let config = default_config();

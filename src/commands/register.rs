@@ -149,6 +149,12 @@ pub async fn register(
         .await?;
     }
 
+    // Insert 0-value baseline snapshots for all Discord stats so the sweeper
+    // always has a reference point to diff against.
+    for stat_name in &["messages_sent", "reactions_added", "commands_used"] {
+        queries::insert_discord_snapshot(&data.db, db_user.id, stat_name, 0.0, &now).await?;
+    }
+
     ctx.say(format!(
 		 "You have been registered as **{}** (UUID `{}`). You can now start earning XP and tracking your stats!",
 		 profile.name, profile.id

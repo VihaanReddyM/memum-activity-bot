@@ -21,9 +21,6 @@ pub async fn stats(
     let target = user.as_ref().unwrap_or_else(|| ctx.author());
     let data = ctx.data();
 
-    // ---------------------------------------------------------
-    // Get user from database
-    // ---------------------------------------------------------
     let db_user =
         queries::get_user_by_discord_id(&data.db, target.id.get() as i64, guild_id.get() as i64)
             .await?;
@@ -40,9 +37,6 @@ pub async fn stats(
         }
     };
 
-    // ---------------------------------------------------------
-    // Fetch Hypixel data
-    // ---------------------------------------------------------
     let player_data = match data.hypixel.fetch_player(&db_user.minecraft_uuid).await {
         Ok(p) => p,
         Err(e) => {
@@ -66,9 +60,6 @@ pub async fn stats(
 
     let stats = &player_data.bedwars;
 
-    // ---------------------------------------------------------
-    // Get XP (and derive level)
-    // ---------------------------------------------------------
     let xp_row = queries::get_xp(&data.db, db_user.id).await?;
     let total_xp = xp_row.as_ref().map(|x| x.total_xp).unwrap_or(0.0);
     // Level calculation from XP using AppConfig values
@@ -76,9 +67,6 @@ pub async fn stats(
     let exponent = data.config.level_exponent;
     let current_level = calculator::calculate_level(total_xp, base_xp, exponent);
 
-    // ---------------------------------------------------------
-    // Build embed
-    // ---------------------------------------------------------
     let embed = CreateEmbed::default()
         .title(format!("Bedwars Stats — {}", target.name))
         .color(0x00BFFF)

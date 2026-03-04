@@ -36,6 +36,11 @@ pub struct AppConfig {
 
     /// Exponential scaling factor for the leveling curve.
     pub level_exponent: f64,
+
+    /// Discord user IDs that are allowed to use admin-only commands such as
+    /// `/edit-stats` and `/set-register-role`. Parsed from `ADMIN_USER_IDS`
+    /// (comma-separated list of snowflake IDs). Empty if the env var is unset.
+    pub admin_user_ids: Vec<u64>,
 }
 
 impl AppConfig {
@@ -60,13 +65,14 @@ impl AppConfig {
                 .unwrap_or_else(|_| "1.5".to_string())
                 .parse()
                 .expect("LEVEL_EXPONENT must be a valid f64"),
+            admin_user_ids: env::var("ADMIN_USER_IDS")
+                .unwrap_or_default()
+                .split(',')
+                .filter_map(|s| s.trim().parse::<u64>().ok())
+                .collect(),
         }
     }
 }
-
-// ---------------------------------------------------------------------------
-// Per-guild config (stored as JSON in the database)
-// ---------------------------------------------------------------------------
 
 /// Configuration for a single Discord guild, stored as JSON in `guilds.config_json`.
 ///
@@ -104,13 +110,14 @@ impl Default for GuildConfig {
 }
 
 /// The default XP configuration used when a guild has not customized theirs.
+///
+/// Keys use raw Hypixel API stat names. Discord stats (`messages_sent`,
+/// `reactions_added`, `commands_used`) are intentionally excluded — admins
+/// must opt in via `/edit-stats add`.
 fn default_xp_config() -> HashMap<String, f64> {
     let mut map = HashMap::new();
-    map.insert("wins".to_string(), 50.0);
-    map.insert("kills".to_string(), 5.0);
-    map.insert("beds_broken".to_string(), 25.0);
-    map.insert("messages_sent".to_string(), 1.0);
-    map.insert("reactions_added".to_string(), 1.0);
-    map.insert("commands_used".to_string(), 2.0);
+    map.insert("wins_bedwars".to_string(), 50.0);
+    map.insert("kills_bedwars".to_string(), 5.0);
+    map.insert("beds_broken_bedwars".to_string(), 25.0);
     map
 }

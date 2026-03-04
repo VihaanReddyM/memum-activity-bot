@@ -6,10 +6,7 @@
 use std::collections::HashMap;
 
 use serde::Deserialize;
-
-// ---------------------------------------------------------------------------
-// Mojang API
-// ---------------------------------------------------------------------------
+use serde_json::Value;
 
 /// Response from the Mojang username-to-UUID endpoint.
 ///
@@ -21,10 +18,6 @@ pub struct MojangProfile {
     /// The player's current username.
     pub name: String,
 }
-
-// ---------------------------------------------------------------------------
-// Hypixel API response
-// ---------------------------------------------------------------------------
 
 /// Top-level response from `GET https://api.hypixel.net/v2/player?uuid={uuid}`.
 #[derive(Debug, Deserialize)]
@@ -64,52 +57,73 @@ pub struct HypixelStats {
     pub bedwars: Option<HypixelBedwarsRaw>,
 }
 
-/// Raw Bedwars stats as they appear in the Hypixel API response.
-/// Field names match the API's key names exactly.
+/// Raw Bedwars stats as a flat key-value map straight from the Hypixel API.
+///
+/// Using a `HashMap<String, serde_json::Value>` instead of a typed struct means
+/// any stat keys added by Hypixel are captured automatically without code changes.
+/// Non-numeric fields (objects, arrays, strings, booleans) are filtered out in
+/// `BedwarsStats::from_raw`.
 #[derive(Debug, Deserialize)]
-pub struct HypixelBedwarsRaw {
-    #[serde(default)]
-    pub wins_bedwars: f64,
-    #[serde(default)]
-    pub kills_bedwars: f64,
-    #[serde(default)]
-    pub beds_broken_bedwars: f64,
-    #[serde(default)]
-    pub final_kills_bedwars: f64,
-    #[serde(default)]
-    pub deaths_bedwars: f64,
-    #[serde(default)]
-    pub losses_bedwars: f64,
-    #[serde(default)]
-    pub games_played_bedwars: f64,
-}
+pub struct HypixelBedwarsRaw(pub HashMap<String, Value>);
 
 // ---------------------------------------------------------------------------
-// Internal representation
+// Dream-mode stat filtering
 // ---------------------------------------------------------------------------
+
+/// Substrings that identify dream-mode stats (e.g. `_voidless_kills_bedwars`).
+const DREAM_MODE_SUBSTRINGS: &[&str] = &[
+    "_voidless_",
+    "_lucky_",
+    "_rush_",
+    "_ultimate_",
+    "_armed_",
+    "_swap_",
+];
+
+/// Key prefixes that identify dream-mode stats (e.g. `castle_kills_bedwars`).
+const DREAM_MODE_PREFIXES: &[&str] = &["castle_"];
+
+/// Returns `true` if the stat key belongs to a dream mode and should be excluded.
+fn is_dream_mode_stat(key: &str) -> bool {
+    for sub in DREAM_MODE_SUBSTRINGS {
+        if key.contains(sub) {
+            return true;
+        }
+    }
+    for prefix in DREAM_MODE_PREFIXES {
+        if key.starts_with(prefix) {
+            return true;
+        }
+    }
+    false
+}
 
 /// Cleaned-up Bedwars stats used internally.
 ///
 /// Stats are stored as a `HashMap<String, f64>` so new stats can be added
-/// dynamically (e.g. via the sweeper) without changing this struct. The named
-/// accessor methods are conveniences for the most commonly used stats.
+/// dynamically without changing this struct. Keys use raw API names
+/// (e.g. `"wins_bedwars"`, `"kills_bedwars"`, `"beds_broken_bedwars"`).
 #[derive(Debug, Clone)]
 pub struct BedwarsStats {
-    /// Dynamic stat map. Keys use short names (e.g. "wins", "kills").
+    /// Dynamic stat map keyed by raw Hypixel API stat name.
     pub stats: HashMap<String, f64>,
 }
 
 impl BedwarsStats {
     /// Build a `BedwarsStats` from the raw API response.
+    ///
+    /// Only numeric values are kept (`Value::as_f64().is_some()`). Dream-mode
+    /// stats are excluded. Keys retain their original API names.
     pub fn from_raw(raw: &HypixelBedwarsRaw) -> Self {
         let mut stats = HashMap::new();
-        stats.insert("wins".to_string(), raw.wins_bedwars);
-        stats.insert("kills".to_string(), raw.kills_bedwars);
-        stats.insert("beds_broken".to_string(), raw.beds_broken_bedwars);
-        stats.insert("final_kills".to_string(), raw.final_kills_bedwars);
-        stats.insert("deaths".to_string(), raw.deaths_bedwars);
-        stats.insert("losses".to_string(), raw.losses_bedwars);
-        stats.insert("games_played".to_string(), raw.games_played_bedwars);
+        for (key, value) in &raw.0 {
+            if is_dream_mode_stat(key) {
+                continue;
+            }
+            if let Some(f) = value.as_f64() {
+                stats.insert(key.clone(), f);
+            }
+        }
         Self { stats }
     }
 
@@ -123,15 +137,18 @@ impl BedwarsStats {
     // Convenience accessors ------------------------------------------------
 
     pub fn wins(&self) -> f64 {
-        self.stats.get("wins").copied().unwrap_or(0.0)
+        self.stats.get("wins_bedwars").copied().unwrap_or(0.0)
     }
 
     pub fn kills(&self) -> f64 {
-        self.stats.get("kills").copied().unwrap_or(0.0)
+        self.stats.get("kills_bedwars").copied().unwrap_or(0.0)
     }
 
     pub fn beds_broken(&self) -> f64 {
-        self.stats.get("beds_broken").copied().unwrap_or(0.0)
+        self.stats
+            .get("beds_broken_bedwars")
+            .copied()
+            .unwrap_or(0.0)
     }
 }
 

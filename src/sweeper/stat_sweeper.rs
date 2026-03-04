@@ -2,12 +2,15 @@
 ///
 /// Periodically fetches Hypixel stats for all registered users, computes
 /// deltas against the most recent snapshot, stores a new snapshot, and feeds
-/// the deltas into the XP calculator. Also collects Discord activity deltas
-/// when enabled for the guild.
+/// the deltas into the XP calculator. Discord activity deltas are always
+/// collected; whether they contribute to XP is controlled by the guild's
+/// `xp_config`.
 ///
-/// The sweeper is designed to be extensible: adding a new stat source is a
-/// matter of fetching additional data, producing `StatDelta` values, and
-/// inserting new snapshot rows.
+/// Snapshot efficiency: on each sweep only stats currently present in
+/// `xp_config` receive new snapshot rows (saves write amplification). When a
+/// stat is first added to `xp_config` the sweeper's baseline query returns the
+/// registration snapshot, so the delta is computed from the time of
+/// registration — this is intentional.
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -66,19 +69,37 @@ async fn sweep_user(
 ) -> Result<()> {
     // 1. Fetch current stats from Hypixel.
     let player_data = hypixel.fetch_player(&user.minecraft_uuid).await?;
-    let stats = &player_data.bedwars;
+    let bw = &player_data.bedwars;
 
     let now = OffsetDateTime::now_utc()
         .format(&time::format_description::well_known::Rfc3339)
         .unwrap_or_else(|_| "unknown".to_string());
 
-    // 2. For each Hypixel stat, compare with the latest snapshot and build deltas.
+    // 2. Load guild config (required to know which stats are in xp_config).
+    let guild_config = load_guild_config(pool, user.guild_id).await;
+
+    // 3. For each Hypixel stat currently in xp_config, compare with the latest
+    //    snapshot and build deltas. Only stats in xp_config receive new snapshot
+    //    rows on each sweep; all others are left unchanged.
     let mut deltas: Vec<StatDelta> = Vec::new();
 
-    for (stat_name, &new_value) in &stats.stats {
-        let previous = queries::get_latest_hypixel_snapshot(pool, user.id, stat_name).await?;
+    for stat_name in guild_config.xp_config.keys() {
+        // Discord stats live in a separate table — handled in step 4.
+        if DISCORD_STAT_NAMES.contains(&stat_name.as_str()) {
+            continue;
+        }
 
-        // If no previous snapshot exists, create a baseline snapshot and skip XP
+        // Look up the current value from the live Hypixel data.
+        let new_value = match bw.stats.get(stat_name) {
+            Some(&v) => v,
+            None => continue, // Stat not present in player data, skip.
+        };
+
+        let previous =
+            queries::get_latest_hypixel_snapshot(pool, user.id, stat_name).await?;
+
+        // If no prior snapshot exists for this stat yet, create a baseline and
+        // skip awarding XP for this sweep.
         if previous.is_none() {
             queries::insert_hypixel_snapshot(pool, user.id, stat_name, new_value, &now).await?;
             continue;
@@ -86,8 +107,7 @@ async fn sweep_user(
 
         let old_value = previous.as_ref().map(|s| s.stat_value).unwrap_or(0.0);
 
-        // Always store a new snapshot (even if the value hasn't changed, so we
-        // have a continuous timeline).
+        // Store a new snapshot so we have a continuous timeline.
         queries::insert_hypixel_snapshot(pool, user.id, stat_name, new_value, &now).await?;
 
         // Only produce a delta if the value actually changed.
@@ -102,49 +122,44 @@ async fn sweep_user(
         }
     }
 
-    // 3. Collect Discord activity deltas (if enabled for this guild).
-    let guild_config = load_guild_config(pool, user.guild_id).await;
+    // 4. Collect Discord activity deltas (always — XP gated by xp_config in
+    //    the calculator, not here).
+    for &stat_name in DISCORD_STAT_NAMES {
+        let latest = queries::get_latest_discord_snapshot(pool, user.id, stat_name).await?;
+        if let Some(snap) = latest {
+            let current_value = snap.stat_value;
 
-    if guild_config.discord_stats_enabled {
-        for &stat_name in DISCORD_STAT_NAMES {
-            let latest = queries::get_latest_discord_snapshot(pool, user.id, stat_name).await?;
-            if let Some(snap) = latest {
-                let current_value = snap.stat_value;
-
-                // Get the user's XP row to find last_updated (last sweep time).
-                // Compare the current cumulative discord stat value against the
-                // value that was current at the last sweep time.
-                let xp_row = queries::get_xp(pool, user.id).await?;
-                let old_value = match &xp_row {
-                    Some(xp) => {
-                        get_discord_value_at_time(pool, user.id, stat_name, &xp.last_updated)
-                            .await
-                            .unwrap_or(0.0)
-                    }
-                    None => 0.0,
-                };
-
-                let diff = current_value - old_value;
-                if diff > f64::EPSILON {
-                    deltas.push(StatDelta::new(
-                        user.id,
-                        stat_name.to_string(),
-                        old_value,
-                        current_value,
-                    ));
+            // Get the user's XP row to find last_updated (last sweep time) and
+            // compare the current cumulative value against what it was then.
+            let xp_row = queries::get_xp(pool, user.id).await?;
+            let old_value = match &xp_row {
+                Some(xp) => {
+                    get_discord_value_at_time(pool, user.id, stat_name, &xp.last_updated)
+                        .await
+                        .unwrap_or(0.0)
                 }
+                None => 0.0,
+            };
+
+            let diff = current_value - old_value;
+            if diff > f64::EPSILON {
+                deltas.push(StatDelta::new(
+                    user.id,
+                    stat_name.to_string(),
+                    old_value,
+                    current_value,
+                ));
             }
         }
     }
 
-    // 4. If there are meaningful deltas, calculate XP and update total/level.
+    // 5. If there are meaningful deltas, calculate XP and update total/level.
     if !deltas.is_empty() {
-        // Build XP config from guild config
         let xp_cfg = crate::xp::XPConfig::new(guild_config.xp_config.clone());
 
         let earned = calculator::calculate_xp(&deltas, &xp_cfg);
         if earned > 0.0 {
-            // Fetch current XP total and level
+            // Fetch current XP total and level.
             let xp_row = queries::get_xp(pool, user.id).await?;
             let current_xp = xp_row.as_ref().map(|x| x.total_xp).unwrap_or(0.0);
             let old_level = xp_row.as_ref().map(|x| x.level).unwrap_or(1);
@@ -156,7 +171,7 @@ async fn sweep_user(
                 config.level_exponent,
             ) as i64;
 
-            // Persist new total XP and level
+            // Persist new total XP and level.
             queries::set_xp_and_level(pool, user.id, new_total, new_level, &now).await?;
 
             info!(
@@ -167,7 +182,7 @@ async fn sweep_user(
                 "Sweep: XP updated for user."
             );
 
-            // 5. Level-up detection
+            // 6. Level-up detection.
             if new_level > old_level {
                 info!(
                     user_id = user.id,

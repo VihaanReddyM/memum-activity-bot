@@ -35,13 +35,13 @@ pub async fn unregister(ctx: Context<'_>) -> Result<(), Error> {
 
     if let Some(role_id) = guild_config.registered_role_id {
         let role = serenity::RoleId::new(role_id);
-        
-        
+
+
         let role_exists = ctx
             .guild()
             .map(|g| g.roles.contains_key(&role))
             .unwrap_or(false);
-        
+
         // check role exists in cached guild
         if !role_exists {
 			info!(

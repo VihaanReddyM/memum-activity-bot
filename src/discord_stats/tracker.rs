@@ -1,8 +1,9 @@
 /// Discord activity tracking.
 ///
 /// Listens to Discord events (messages, reactions) and records them as dynamic
-/// stats in the `discord_stats_snapshot` table. These stats only affect XP
-/// if `discord_stats_enabled` is true in the guild config.
+/// stats in the `discord_stats_snapshot` table. Stats are always tracked for
+/// registered users; whether they contribute to XP is controlled solely by the
+/// guild's `xp_config` (set via `/edit-stats`).
 ///
 /// The tracker increments cumulative counters. Each event bumps the counter by
 /// one and stores a new snapshot row, mirroring the EAV pattern used for
@@ -12,7 +13,6 @@ use sqlx::SqlitePool;
 use time::OffsetDateTime;
 use tracing::{debug, error};
 
-use crate::config::GuildConfig;
 use crate::database::queries;
 use crate::shared::types::{Data, Error};
 
@@ -31,10 +31,6 @@ pub async fn handle_event(event: &FullEvent, data: &Data) -> Result<(), Error> {
             let Some(guild_id) = new_message.guild_id else {
                 return Ok(()); // DM, ignore.
             };
-
-            if !is_discord_stats_enabled(&data.db, guild_id.get() as i64).await {
-                return Ok(());
-            }
 
             increment_stat(
                 &data.db,
@@ -56,10 +52,6 @@ pub async fn handle_event(event: &FullEvent, data: &Data) -> Result<(), Error> {
                 return Ok(());
             };
 
-            if !is_discord_stats_enabled(&data.db, guild_id.get() as i64).await {
-                return Ok(());
-            }
-
             increment_stat(
                 &data.db,
                 user_id.get() as i64,
@@ -79,26 +71,7 @@ pub async fn handle_event(event: &FullEvent, data: &Data) -> Result<(), Error> {
 /// Record a command usage for the invoking user. Called from the Poise
 /// pre-command hook.
 pub async fn record_command_usage(pool: &SqlitePool, discord_user_id: i64, guild_id: i64) {
-    if !is_discord_stats_enabled(pool, guild_id).await {
-        return;
-    }
-
     increment_stat(pool, discord_user_id, guild_id, "commands_used").await;
-}
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-/// Check whether the guild has discord stats tracking enabled.
-async fn is_discord_stats_enabled(pool: &SqlitePool, guild_id: i64) -> bool {
-    match queries::get_guild(pool, guild_id).await {
-        Ok(Some(guild)) => {
-            let config: GuildConfig = serde_json::from_str(&guild.config_json).unwrap_or_default();
-            config.discord_stats_enabled
-        }
-        _ => false,
-    }
 }
 
 /// Increment a stat counter for a user. If the user is not registered in the
