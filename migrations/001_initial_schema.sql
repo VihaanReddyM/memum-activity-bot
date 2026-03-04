@@ -59,11 +59,10 @@ CREATE TABLE IF NOT EXISTS discord_stats_snapshot (
 CREATE INDEX IF NOT EXISTS idx_discord_snap_user_stat_ts
     ON discord_stats_snapshot(user_id, stat_name, timestamp);
 
--- =========================================================================
--- Accumulated points
--- =========================================================================
-CREATE TABLE IF NOT EXISTS points (
+-- XP table (replaces points)
+CREATE TABLE IF NOT EXISTS xp (
     user_id      INTEGER PRIMARY KEY REFERENCES users(id),
-    total_points REAL    NOT NULL DEFAULT 0,
+    total_xp     REAL    NOT NULL DEFAULT 0,
+    level        INTEGER NOT NULL DEFAULT 1,
     last_updated TEXT    NOT NULL
 );

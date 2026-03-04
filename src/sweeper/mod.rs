@@ -10,13 +10,19 @@ use std::time::Duration;
 use sqlx::SqlitePool;
 use tracing::{error, info};
 
+use crate::config::AppConfig;
 use crate::hypixel::client::HypixelClient;
 
 /// Spawn the stat sweeper as a background tokio task.
 ///
 /// The task runs forever, executing a sweep every `interval_seconds` seconds.
 /// Errors during individual sweeps are logged but do not crash the task.
-pub fn start_sweeper(pool: SqlitePool, hypixel: Arc<HypixelClient>, interval_seconds: u64) {
+pub fn start_sweeper(
+    pool: SqlitePool,
+    hypixel: Arc<HypixelClient>,
+    interval_seconds: u64,
+    config: AppConfig,
+) {
     let interval = Duration::from_secs(interval_seconds);
 
     tokio::spawn(async move {
@@ -27,7 +33,7 @@ pub fn start_sweeper(pool: SqlitePool, hypixel: Arc<HypixelClient>, interval_sec
 
             info!("Stat sweeper: starting sweep iteration...");
 
-            if let Err(e) = stat_sweeper::run_sweep(&pool, &hypixel).await {
+            if let Err(e) = stat_sweeper::run_sweep(&pool, &hypixel, &config).await {
                 error!(error = %e, "Stat sweeper: sweep iteration failed.");
             }
         }

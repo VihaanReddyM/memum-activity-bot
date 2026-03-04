@@ -7,7 +7,7 @@ use crate::config::GuildConfig;
 use crate::database::queries;
 use crate::shared::types::{Context, Error};
 
-/// Unregister your Minecraft account and stop tracking stats and earning points.
+/// Unregister your Minecraft account and stop tracking stats and earning XP.
 #[poise::command(slash_command, guild_only)]
 pub async fn unregister(ctx: Context<'_>) -> Result<(), Error> {
     let guild_id = ctx

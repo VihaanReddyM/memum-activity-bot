@@ -7,7 +7,7 @@
 /// for extensions and future commands.
 use sqlx::{SqlitePool};
 
-use super::models::{DbGuild, DbPoints, DbStatsSnapshot, DbUser};
+use super::models::{DbGuild, DbXP, DbStatsSnapshot, DbUser};
 
 // =========================================================================
 // guilds
@@ -122,7 +122,7 @@ pub async fn unregister_user(
             .execute(pool)
             .await?;
 
-        sqlx::query("DELETE FROM points WHERE user_id = ?")
+        sqlx::query("DELETE FROM xp WHERE user_id = ?")
             .bind(uid)
             .execute(pool)
             .await?;
@@ -258,36 +258,70 @@ pub async fn get_latest_discord_snapshot(
 }
 
 // =========================================================================
-// points
+// xp
 // =========================================================================
 
-/// Insert or update points for a user. Adds the given `points_to_add` to the
+/// Insert or update XP for a user. Adds the given `xp_to_add` to the
 /// existing total (or creates a new row starting from zero).
-pub async fn upsert_points(
+pub async fn upsert_xp(
     pool: &SqlitePool,
     user_id: i64,
-    points_to_add: f64,
+    xp_to_add: f64,
     timestamp: &str,
 ) -> Result<(), sqlx::Error> {
     sqlx::query(
-        "INSERT INTO points (user_id, total_points, last_updated)
+        "INSERT INTO xp (user_id, total_xp, last_updated)
          VALUES (?, ?, ?)
          ON CONFLICT(user_id) DO UPDATE SET
-             total_points = points.total_points + excluded.total_points,
+             total_xp = xp.total_xp + excluded.total_xp,
              last_updated = excluded.last_updated",
     )
     .bind(user_id)
-    .bind(points_to_add)
+    .bind(xp_to_add)
     .bind(timestamp)
     .execute(pool)
     .await?;
     Ok(())
 }
 
-/// Retrieve current points for a user, if they exist.
-pub async fn get_points(pool: &SqlitePool, user_id: i64) -> Result<Option<DbPoints>, sqlx::Error> {
-    sqlx::query_as::<_, DbPoints>("SELECT * FROM points WHERE user_id = ?")
+/// Set the XP total and level for a user (used after computing new totals).
+pub async fn set_xp_and_level(
+    pool: &SqlitePool,
+    user_id: i64,
+    total_xp: f64,
+    level: i64,
+    timestamp: &str,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        "INSERT INTO xp (user_id, total_xp, level, last_updated)
+         VALUES (?, ?, ?, ?)
+         ON CONFLICT(user_id) DO UPDATE SET
+             total_xp = excluded.total_xp,
+             level = excluded.level,
+             last_updated = excluded.last_updated",
+    )
+    .bind(user_id)
+    .bind(total_xp)
+    .bind(level)
+    .bind(timestamp)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+/// Retrieve current XP for a user, if they exist.
+pub async fn get_xp(pool: &SqlitePool, user_id: i64) -> Result<Option<DbXP>, sqlx::Error> {
+    sqlx::query_as::<_, DbXP>("SELECT * FROM xp WHERE user_id = ?")
         .bind(user_id)
         .fetch_optional(pool)
         .await
+}
+
+/// Delete a user's XP record (used when unregistering).
+pub async fn delete_xp(pool: &SqlitePool, user_id: i64) -> Result<(), sqlx::Error> {
+    sqlx::query("DELETE FROM xp WHERE user_id = ?")
+        .bind(user_id)
+        .execute(pool)
+        .await?;
+    Ok(())
 }

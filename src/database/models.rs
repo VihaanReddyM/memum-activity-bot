@@ -48,13 +48,14 @@ pub struct DbStatsSnapshot {
 }
 
 // ---------------------------------------------------------------------------
-// points
+// xp
 // ---------------------------------------------------------------------------
 
-/// A row from the `points` table.
+/// A row from the `xp` table.
 #[derive(Debug, Clone, FromRow)]
-pub struct DbPoints {
+pub struct DbXP {
     pub user_id: i64,
-    pub total_points: f64,
+    pub total_xp: f64,
+    pub level: i64,
     pub last_updated: String,
 }

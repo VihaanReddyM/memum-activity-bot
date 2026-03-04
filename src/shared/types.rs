@@ -2,7 +2,7 @@
 ///
 /// This module defines the core `Data` struct that Poise passes to every command,
 /// the common error type, the Poise context alias, and the `StatDelta` struct that
-/// serves as the universal interface between stat sources and the points calculator.
+/// serves as the universal interface between stat sources and the XP calculator.
 use std::sync::Arc;
 
 use sqlx::SqlitePool;

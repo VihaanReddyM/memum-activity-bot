@@ -33,6 +33,7 @@ pub async fn build(
     let sweep_db = db.clone();
     let sweep_hypixel = hypixel.clone();
     let sweep_interval = config.sweep_interval_seconds;
+    let sweep_config = config.clone();
 
     let framework = poise::Framework::builder()
         .options(poise::FrameworkOptions {
@@ -91,7 +92,7 @@ pub async fn build(
 				}
         
                 // Start background sweeper
-                sweeper::start_sweeper(sweep_db, sweep_hypixel, sweep_interval);
+                sweeper::start_sweeper(sweep_db, sweep_hypixel, sweep_interval, sweep_config);
         
                 Ok(Data { db, hypixel, config })
             })

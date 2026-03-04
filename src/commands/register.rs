@@ -11,7 +11,7 @@ use crate::database::queries;
 use crate::shared::types::{Context, Error};
 use poise::serenity_prelude::RoleId;
 
-/// Register your Minecraft account to start tracking stats and earning points.
+/// Register your Minecraft account to start tracking stats and earning XP.
 #[poise::command(slash_command, guild_only)]
 pub async fn register(
     ctx: Context<'_>,
@@ -135,7 +135,7 @@ pub async fn register(
         queries::register_user(&data.db, discord_user_id, &profile.id, guild_id_i64, &now).await?;
 
     ctx.say(format!(
-		 "You have been registered as **{}** (UUID `{}`). You can now start earning points and tracking your stats!",
+		 "You have been registered as **{}** (UUID `{}`). You can now start earning XP and tracking your stats!",
 		 profile.name, profile.id
 	 )).await?;
 
@@ -146,8 +146,8 @@ pub async fn register(
         "User registered."
     );
 
-    // Ensure the user has an initial points row.
-    queries::upsert_points(&data.db, db_user.id, 0.0, &now).await?;
+    // Ensure the user has an initial XP row (start at 0 XP, level 1).
+    queries::upsert_xp(&data.db, db_user.id, 0.0, &now).await?;
 
     Ok(())
 }

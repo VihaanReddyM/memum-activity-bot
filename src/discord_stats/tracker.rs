@@ -1,7 +1,7 @@
 /// Discord activity tracking.
 ///
 /// Listens to Discord events (messages, reactions) and records them as dynamic
-/// stats in the `discord_stats_snapshot` table. These stats only affect points
+/// stats in the `discord_stats_snapshot` table. These stats only affect XP
 /// if `discord_stats_enabled` is true in the guild config.
 ///
 /// The tracker increments cumulative counters. Each event bumps the counter by
