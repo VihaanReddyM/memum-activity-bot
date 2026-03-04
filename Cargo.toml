@@ -1,0 +1,9 @@
+[package]
+name = "memum-activity-bot"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+poise = "0.6.1"
+serenity = "0.12.5"
+tokio = "1.50.0"
