@@ -1,8 +1,8 @@
-/// Hypixel API response models and internal stat representations.
-///
-/// The Hypixel API returns deeply nested JSON. We only deserialize the fields
-/// we need and use `#[serde(default)]` liberally so missing fields don't cause
-/// errors (not all players have all stats).
+// Hypixel API response models and internal stat representations.
+//
+// The Hypixel API returns deeply nested JSON. We only deserialize the fields
+// we need and use `#[serde(default)]` liberally so missing fields don't cause
+// errors (not all players have all stats).
 use std::collections::HashMap;
 
 use serde::Deserialize;
@@ -36,7 +36,25 @@ pub struct HypixelPlayerResponse {
 /// The `player` object inside the Hypixel API response.
 #[derive(Debug, Deserialize)]
 pub struct HypixelPlayer {
+    #[serde(default)]
     pub stats: Option<HypixelStats>,
+
+    /// Social media block: API key is `socialMedia`.
+    #[serde(rename = "socialMedia")]
+    #[serde(default)]
+    pub social_media: Option<HypixelSocialMedia>,
+}
+
+/// Social media block inside `player`.
+#[derive(Debug, Deserialize)]
+pub struct HypixelSocialMedia {
+    #[serde(default)]
+    pub links: HashMap<String, String>,
+
+    // There is a `prompt` boolean in some responses; include it in case it's
+    // useful later.
+    #[serde(default)]
+    pub prompt: bool,
 }
 
 /// Container for all game mode stats. We only care about Bedwars.
@@ -115,4 +133,13 @@ impl BedwarsStats {
     pub fn beds_broken(&self) -> f64 {
         self.stats.get("beds_broken").copied().unwrap_or(0.0)
     }
+}
+
+/// PlayerData is the compact internal structure returned by the Hypixel client
+/// and stored in the TTL cache.
+#[derive(Debug, Clone)]
+pub struct PlayerData {
+    pub bedwars: BedwarsStats,
+    /// social links (e.g. "DISCORD" -> "va80_")
+    pub social_links: HashMap<String, String>,
 }

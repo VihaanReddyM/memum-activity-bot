@@ -42,6 +42,39 @@ pub async fn register(
         .await
         .map_err(|e| format!("Could not resolve Minecraft username: {e}"))?;
 
+    let player_data = data
+        .hypixel
+        .fetch_player(&profile.id)
+        .await
+        .map_err(|e| format!("Could not fetch Hypixel player data: {e}"))?;
+
+    let author_tag = ctx.author().tag();
+
+    match player_data.social_links.get("DISCORD") {
+        Some(linked) => {
+            if linked != &author_tag {
+                ctx.say(format!(
+                    "Ownership verification failed.\n\n\
+                     Hypixel account **{}** is linked to Discord `{}` but you are `{}`.\n\
+                     Please update your Hypixel social link to match your Discord.",
+                    profile.name, linked, author_tag
+                ))
+                .await?;
+                return Ok(());
+            }
+        }
+        None => {
+            ctx.say(
+                "Ownership verification failed.\n\n\
+                 Your Hypixel account must have a **Discord social link** set.\n\
+                 Please link your Discord in Hypixel:\n\
+                 `/socials discord <your discord>`",
+            )
+            .await?;
+            return Ok(());
+        }
+    }
+
     let role_id = match guild_config.registered_role_id {
         Some(id) => id,
         None => {
@@ -78,19 +111,19 @@ pub async fn register(
     // Assign the registered role to the user.
     let role = RoleId::new(role_id);
     let member = guild_id.member(ctx.http(), ctx.author().id).await?;
-    
+
     if let Err(e) = member.add_role(ctx.http(), role).await {
         ctx.say(
             "I couldn't assign the registered role. \
             Please ensure I have **Manage Roles** permission and my role is above the registered role."
         )
         .await?;
-    
+
         info!(
             "Failed to assign registered role to user {} in guild {}: {}",
             discord_user_id, guild_id_i64, e
         );
-    
+
         return Ok(());
     }
 

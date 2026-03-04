@@ -56,7 +56,8 @@ async fn sweep_user(
     user: &crate::database::models::DbUser,
 ) -> Result<()> {
     // 1. Fetch current stats from Hypixel.
-    let stats = hypixel.fetch_bedwars_stats(&user.minecraft_uuid).await?;
+    let player_data = hypixel.fetch_player(&user.minecraft_uuid).await?;
+    let stats = &player_data.bedwars;
 
     let now = OffsetDateTime::now_utc()
         .format(&time::format_description::well_known::Rfc3339)

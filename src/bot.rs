@@ -64,35 +64,36 @@ pub async fn build(
         .setup(move |ctx, _ready, framework| {
             Box::pin(async move {
                 info!("Bot is connected and ready!");
-
-                // Register slash commands globally.
+        
                 let dev_guild = std::env::var("DEV_GUILD_ID").ok();
+        
                 if let Some(dev) = dev_guild {
                     if let Ok(gid) = dev.parse::<u64>() {
                         let guild_id = serenity::GuildId::new(gid);
+        
+                        // Remove any existing global commands (prevents duplicates)
+                        serenity::Command::set_global_commands(&ctx.http, vec![]).await?;
+        
+                        // Register commands only in the dev guild
                         poise::builtins::register_in_guild(
                             ctx,
                             &framework.options().commands,
                             guild_id,
                         )
                         .await?;
+        
                         info!(dev_guild = gid, "Slash commands registered in dev guild");
                     } else {
                         info!("DEV_GUILD_ID set but invalid");
                     }
                 } else {
-                    poise::builtins::register_globally(ctx, &framework.options().commands).await?;
-                    info!("Slash commands registered globally.");
-                }
-
-                // Start the background stat sweeper.
+					info!("DEV_GUILD_ID not set, skipping slash command registration");
+				}
+        
+                // Start background sweeper
                 sweeper::start_sweeper(sweep_db, sweep_hypixel, sweep_interval);
-
-                Ok(Data {
-                    db,
-                    hypixel,
-                    config,
-                })
+        
+                Ok(Data { db, hypixel, config })
             })
         })
         .build();

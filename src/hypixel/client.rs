@@ -11,9 +11,10 @@ use std::time::Duration;
 use anyhow::{Context, Result, bail};
 use reqwest::Client;
 use tokio::sync::Semaphore;
-use tracing::{debug, warn};
+use tracing::{debug};
+use std::collections::HashMap;
 
-use super::models::{BedwarsStats, HypixelPlayerResponse, MojangProfile};
+use super::models::{BedwarsStats, HypixelPlayerResponse, MojangProfile, PlayerData};
 use crate::shared::cache::TimedCache;
 
 /// Default cache TTL for Hypixel stat lookups (30 seconds).
@@ -31,7 +32,7 @@ pub struct HypixelClient {
     api_key: String,
 
     /// TTL cache keyed by Minecraft UUID.
-    cache: TimedCache<String, BedwarsStats>,
+    cache: TimedCache<String, PlayerData>,
 
     /// Semaphore used to limit concurrent outgoing requests.
     rate_limiter: Semaphore,
@@ -82,73 +83,54 @@ impl HypixelClient {
     }
 
     // ---------------------------------------------------------------------
-    // Hypixel stats
+    // Hypixel 
     // ---------------------------------------------------------------------
 
-    /// Fetch Bedwars stats for the given UUID.
-    ///
-    /// Results are cached for `CACHE_TTL_SECS` seconds. Concurrent requests
-    /// beyond `MAX_CONCURRENT_REQUESTS` will wait on the semaphore.
-    pub async fn fetch_bedwars_stats(self: &Arc<Self>, uuid: &str) -> Result<BedwarsStats> {
-        // Check cache first.
-        if let Some(cached) = self.cache.get(&uuid.to_string()).await {
-            debug!(uuid, "Returning cached Bedwars stats");
-            return Ok(cached);
-        }
-
-        // Acquire a rate-limit permit before making the request.
-        let _permit = self
-            .rate_limiter
-            .acquire()
-            .await
-            .expect("Semaphore closed unexpectedly");
-
-        // Double-check cache after acquiring the permit (another task may have
-        // populated it while we were waiting).
+    pub async fn fetch_player(self: &Arc<Self>, uuid: &str) -> Result<PlayerData> {
         if let Some(cached) = self.cache.get(&uuid.to_string()).await {
             return Ok(cached);
         }
-
+    
+        // acquire a permit (no Result -> no `?`)
+        let _permit = self.rate_limiter.acquire().await;
+    
         let url = format!("https://api.hypixel.net/v2/player?uuid={}", uuid);
-
+    
         let resp = self
             .http
             .get(&url)
             .header("API-Key", &self.api_key)
             .send()
-            .await
-            .context("Failed to contact Hypixel API")?;
-
-        if !resp.status().is_success() {
-            let status = resp.status();
-            let body = resp.text().await.unwrap_or_default();
-            warn!(uuid, %status, body, "Hypixel API returned non-success status");
-            bail!("Hypixel API error: {} — {}", status, body);
-        }
-
-        let data: HypixelPlayerResponse = resp
-            .json()
-            .await
-            .context("Failed to parse Hypixel API response")?;
-
-        let stats = match data.player {
-            Some(player) => match player.stats {
-                Some(game_stats) => match game_stats.bedwars {
-                    Some(ref bw) => BedwarsStats::from_raw(bw),
-                    None => {
-                        debug!(uuid, "Player has no Bedwars stats");
-                        BedwarsStats::empty()
-                    }
-                },
-                None => BedwarsStats::empty(),
-            },
-            None => BedwarsStats::empty(),
+            .await?;
+    
+        let data: HypixelPlayerResponse = resp.json().await?;
+    
+        let (bedwars, socials) = match data.player {
+            Some(player) => {
+                let bw = player
+                    .stats
+                    .and_then(|s| s.bedwars)
+                    .map(|bw| BedwarsStats::from_raw(&bw))
+                    .unwrap_or_else(BedwarsStats::empty);
+    
+                let socials = player
+                    .social_media
+                    .map(|s| s.links)
+                    .unwrap_or_default();
+    
+                (bw, socials)
+            }
+            None => (BedwarsStats::empty(), HashMap::new()),
         };
-
-        // Store in cache.
-        self.cache.insert(uuid.to_string(), stats.clone()).await;
-        debug!(uuid, "Fetched and cached Bedwars stats");
-
-        Ok(stats)
+    
+        let result = PlayerData {
+            bedwars,
+            social_links: socials,
+        };
+    
+        self.cache.insert(uuid.to_string(), result.clone()).await;
+    
+        Ok(result)
     }
+    
 }
