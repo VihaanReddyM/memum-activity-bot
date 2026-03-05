@@ -18,6 +18,8 @@ mod config;
 mod database;
 mod discord_stats;
 mod hypixel;
+mod level_card;
+mod stats_definitions;
 mod xp;
 mod events;
 mod shared;

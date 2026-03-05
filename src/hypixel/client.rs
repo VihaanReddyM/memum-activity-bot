@@ -85,6 +85,36 @@ impl HypixelClient {
         debug!(username, uuid = %profile.id, "Resolved Minecraft username");
         Ok(profile)
     }
+    
+    pub async fn resolve_uuid(&self, uuid: &str) -> Result<String> {
+        let url = format!(
+            "https://sessionserver.mojang.com/session/minecraft/profile/{}",
+            uuid
+        );
+    
+        let resp = self
+            .http
+            .get(&url)
+            .send()
+            .await
+            .context("Failed to contact Mojang session API")?;
+    
+        if !resp.status().is_success() {
+            bail!("Failed to resolve UUID {}", uuid);
+        }
+    
+        #[derive(serde::Deserialize)]
+        struct Profile {
+            name: String,
+        }
+    
+        let profile: Profile = resp
+            .json()
+            .await
+            .context("Failed to parse Mojang session response")?;
+    
+        Ok(profile.name)
+    }
 
     pub async fn fetch_player(self: &Arc<Self>, uuid: &str) -> Result<PlayerData> {
         if let Some(cached) = self.cache.get(&uuid.to_string()).await {

@@ -1,11 +1,14 @@
 /// `/stats` command.
 ///
-/// Displays a user's current Bedwars stats and accumulated XP.
+/// Shows each configured stat as its **change since registration** —
+/// i.e. the difference between the latest snapshot and the baseline
+/// snapshot taken when the user first ran `/register`.
 use poise::serenity_prelude::{self as serenity, CreateEmbed, CreateEmbedFooter};
 
+use crate::config::GuildConfig;
 use crate::database::queries;
-use crate::xp::calculator;
 use crate::shared::types::{Context, Error};
+use crate::stats_definitions::{display_name_for_key, is_discord_stat};
 
 #[poise::command(slash_command, guild_only)]
 pub async fn stats(
@@ -17,70 +20,114 @@ pub async fn stats(
     let guild_id = ctx
         .guild_id()
         .ok_or("This command can only be used in a server")?;
+    let guild_id_i64 = guild_id.get() as i64;
 
     let target = user.as_ref().unwrap_or_else(|| ctx.author());
     let data = ctx.data();
 
+    // ── resolve registered user ───────────────────────────────────────────────
     let db_user =
-        queries::get_user_by_discord_id(&data.db, target.id.get() as i64, guild_id.get() as i64)
-            .await?;
+        queries::get_user_by_discord_id(&data.db, target.id.get() as i64, guild_id_i64).await?;
 
     let db_user = match db_user {
         Some(u) => u,
         None => {
-            ctx.say(format!(
-                "{} is not registered. Use `/register` to link a Minecraft account.",
-                target.name
-            ))
-            .await?;
-            return Ok(());
-        }
-    };
-
-    let player_data = match data.hypixel.fetch_player(&db_user.minecraft_uuid).await {
-        Ok(p) => p,
-        Err(e) => {
-            let xp = queries::get_xp(&data.db, db_user.id).await?.map(|x| x.total_xp).unwrap_or(0.0);
             let embed = CreateEmbed::default()
-                .title(format!("Stats — {}", target.name))
+                .title("Not Registered")
                 .color(0xFF4444)
                 .description(format!(
-                    "Could not fetch Hypixel stats: {e}\n\n**XP:** {:.0}",
-                    xp
-                ))
-                .footer(CreateEmbedFooter::new(format!(
-                    "UUID: {}",
-                    db_user.minecraft_uuid
-                )));
-
+                    "**{}** is not registered. Use `/register` to link a Minecraft account.",
+                    target.name
+                ));
             ctx.send(poise::CreateReply::default().embed(embed)).await?;
             return Ok(());
         }
     };
 
-    let stats = &player_data.bedwars;
+    // ── load guild config to find active stats ────────────────────────────────
+    let guild_row = queries::get_guild(&data.db, guild_id_i64).await?;
+    let guild_config: GuildConfig = guild_row
+        .as_ref()
+        .map(|g| serde_json::from_str(&g.config_json).unwrap_or_default())
+        .unwrap_or_default();
 
-    let xp_row = queries::get_xp(&data.db, db_user.id).await?;
-    let total_xp = xp_row.as_ref().map(|x| x.total_xp).unwrap_or(0.0);
-    // Level calculation from XP using AppConfig values
-    let base_xp = data.config.base_level_xp;
-    let exponent = data.config.level_exponent;
-    let current_level = calculator::calculate_level(total_xp, base_xp, exponent);
+    let active_keys: Vec<String> = {
+        let mut keys: Vec<String> = guild_config.xp_config.keys().cloned().collect();
+        keys.sort();
+        keys
+    };
 
-    let embed = CreateEmbed::default()
-        .title(format!("Bedwars Stats — {}", target.name))
+    if active_keys.is_empty() {
+        let embed = CreateEmbed::default()
+            .title(format!("Stats — {}", target.name))
+            .color(0xFF4444)
+            .description(
+                "No stats are currently configured. \
+                 An admin can add stats with `/edit-stats add`.",
+            );
+        ctx.send(poise::CreateReply::default().embed(embed)).await?;
+        return Ok(());
+    }
+
+    // ── fetch latest and initial snapshots, compute deltas ───────────────────
+    let mc_name = match &db_user.minecraft_username {
+        Some(name) => name.clone(),
+        None => {
+            match data.hypixel.resolve_uuid(&db_user.minecraft_uuid).await {
+                Ok(name) => name,
+                Err(_) => db_user.minecraft_uuid.clone(),
+            }
+        }
+    };
+
+    let mut embed = CreateEmbed::default()
+        .title(format!("📊 Stats — {}", mc_name))
+        .description(format!(
+            "Statistics gained since **/register** for **{}**",
+            mc_name
+        ))
         .color(0x00BFFF)
-        .field("Wins", stats.wins().to_string(), true)
-        .field("Kills", stats.kills().to_string(), true)
-        .field("Beds Broken", stats.beds_broken().to_string(), true)
-        .field("XP", format!("{:.0}", total_xp), true)
-        .field("Level", current_level.to_string(), true)
-        .footer(CreateEmbedFooter::new(format!(
-            "UUID: {}",
+        .thumbnail(format!(
+            "https://minotar.net/avatar/{}/80",
             db_user.minecraft_uuid
+        ))
+        .author(
+            serenity::CreateEmbedAuthor::new(&target.name)
+                .icon_url(target.avatar_url().unwrap_or_default()),
+        )
+        .footer(CreateEmbedFooter::new(format!(
+            "UUID: {} • {} tracked stats",
+            db_user.minecraft_uuid,
+            active_keys.len()
         )));
 
-    ctx.send(poise::CreateReply::default().embed(embed)).await?;
+    for key in &active_keys {
+        let (latest_val, initial_val) = if is_discord_stat(key) {
+            let latest = queries::get_latest_discord_snapshot(&data.db, db_user.id, key)
+                .await?
+                .map(|s| s.stat_value)
+                .unwrap_or(0.0);
+            let initial = queries::get_first_discord_snapshot(&data.db, db_user.id, key)
+                .await?
+                .map(|s| s.stat_value)
+                .unwrap_or(0.0);
+            (latest, initial)
+        } else {
+            let latest = queries::get_latest_hypixel_snapshot(&data.db, db_user.id, key)
+                .await?
+                .map(|s| s.stat_value)
+                .unwrap_or(0.0);
+            let initial = queries::get_first_hypixel_snapshot(&data.db, db_user.id, key)
+                .await?
+                .map(|s| s.stat_value)
+                .unwrap_or(0.0);
+            (latest, initial)
+        };
 
+        let delta = (latest_val - initial_val).max(0.0);
+        embed = embed.field(display_name_for_key(key), format!("+{:.0}", delta), true);
+    }
+
+    ctx.send(poise::CreateReply::default().embed(embed)).await?;
     Ok(())
 }

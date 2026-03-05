@@ -4,7 +4,7 @@
 /// "Register" button in the specified channel. When a member clicks the
 /// button, the bot reads their server nickname, extracts their Minecraft
 /// username, and runs the same registration flow as `/register`.
-use poise::serenity_prelude as serenity;
+use poise::serenity_prelude::{self as serenity, CreateEmbed};
 use tracing::info;
 
 use crate::shared::types::{Context, Error};
@@ -21,8 +21,11 @@ pub async fn send_registration_message(
         .admin_user_ids
         .contains(&ctx.author().id.get())
     {
-        ctx.say("You do not have permission to use this command.")
-            .await?;
+        let embed = CreateEmbed::default()
+            .title("Permission Denied")
+            .color(0xFF4444)
+            .description("You do not have permission to use this command.");
+        ctx.send(poise::CreateReply::default().embed(embed)).await?;
         return Ok(());
     }
 
@@ -52,11 +55,14 @@ pub async fn send_registration_message(
         "Registration message sent."
     );
 
-    ctx.say(format!(
-        "Registration message sent to <#{}>.",
-        channel.id
-    ))
-    .await?;
+    let embed = CreateEmbed::default()
+        .title("Registration Message Sent")
+        .color(0x00BFFF)
+        .description(format!(
+            "Registration message sent to <#{}>.",
+            channel.id
+        ));
+    ctx.send(poise::CreateReply::default().embed(embed)).await?;
 
     Ok(())
 }

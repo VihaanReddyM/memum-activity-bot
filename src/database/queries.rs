@@ -45,22 +45,26 @@ pub async fn update_guild_config(pool: &SqlitePool, guild_id: i64, config_json: 
 // users
 // =========================================================================
 
-/// Register a new user. Uses `ON CONFLICT` to update the Minecraft UUID if the
-/// user re-registers in the same guild.
+/// Register a new user. Uses `ON CONFLICT` to update the Minecraft UUID and
+/// username if the user re-registers in the same guild.
 pub async fn register_user(
     pool: &SqlitePool,
     discord_user_id: i64,
     minecraft_uuid: &str,
+    minecraft_username: &str,
     guild_id: i64,
     registered_at: &str,
 ) -> Result<DbUser, sqlx::Error> {
     sqlx::query(
-        "INSERT INTO users (discord_user_id, minecraft_uuid, guild_id, registered_at)
-         VALUES (?, ?, ?, ?)
-         ON CONFLICT(discord_user_id, guild_id) DO UPDATE SET minecraft_uuid = excluded.minecraft_uuid",
+        "INSERT INTO users (discord_user_id, minecraft_uuid, minecraft_username, guild_id, registered_at)
+         VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT(discord_user_id, guild_id) DO UPDATE SET
+             minecraft_uuid     = excluded.minecraft_uuid,
+             minecraft_username = excluded.minecraft_username",
     )
     .bind(discord_user_id)
     .bind(minecraft_uuid)
+    .bind(minecraft_username)
     .bind(guild_id)
     .bind(registered_at)
     .execute(pool)
@@ -72,6 +76,84 @@ pub async fn register_user(
         .bind(guild_id)
         .fetch_one(pool)
         .await
+}
+
+/// Get the most recent Hypixel stat snapshot for a user with a timestamp
+/// strictly before `before_ts`. Used to compute "since last sweep" deltas.
+pub async fn get_hypixel_snapshot_before(
+    pool: &SqlitePool,
+    user_id: i64,
+    stat_name: &str,
+    before_ts: &str,
+) -> Result<Option<DbStatsSnapshot>, sqlx::Error> {
+    sqlx::query_as::<_, DbStatsSnapshot>(
+        "SELECT * FROM hypixel_stats_snapshot
+         WHERE user_id = ? AND stat_name = ? AND timestamp < ?
+         ORDER BY timestamp DESC
+         LIMIT 1",
+    )
+    .bind(user_id)
+    .bind(stat_name)
+    .bind(before_ts)
+    .fetch_optional(pool)
+    .await
+}
+
+/// Get the most recent Discord stat snapshot for a user with a timestamp
+/// strictly before `before_ts`. Used to compute "since last sweep" deltas.
+pub async fn get_discord_snapshot_before(
+    pool: &SqlitePool,
+    user_id: i64,
+    stat_name: &str,
+    before_ts: &str,
+) -> Result<Option<DbStatsSnapshot>, sqlx::Error> {
+    sqlx::query_as::<_, DbStatsSnapshot>(
+        "SELECT * FROM discord_stats_snapshot
+         WHERE user_id = ? AND stat_name = ? AND timestamp < ?
+         ORDER BY timestamp DESC
+         LIMIT 1",
+    )
+    .bind(user_id)
+    .bind(stat_name)
+    .bind(before_ts)
+    .fetch_optional(pool)
+    .await
+}
+
+/// Get the earliest (registration-time) Hypixel stat snapshot for a user.
+pub async fn get_first_hypixel_snapshot(
+    pool: &SqlitePool,
+    user_id: i64,
+    stat_name: &str,
+) -> Result<Option<DbStatsSnapshot>, sqlx::Error> {
+    sqlx::query_as::<_, DbStatsSnapshot>(
+        "SELECT * FROM hypixel_stats_snapshot
+         WHERE user_id = ? AND stat_name = ?
+         ORDER BY timestamp ASC
+         LIMIT 1",
+    )
+    .bind(user_id)
+    .bind(stat_name)
+    .fetch_optional(pool)
+    .await
+}
+
+/// Get the earliest (registration-time) Discord stat snapshot for a user.
+pub async fn get_first_discord_snapshot(
+    pool: &SqlitePool,
+    user_id: i64,
+    stat_name: &str,
+) -> Result<Option<DbStatsSnapshot>, sqlx::Error> {
+    sqlx::query_as::<_, DbStatsSnapshot>(
+        "SELECT * FROM discord_stats_snapshot
+         WHERE user_id = ? AND stat_name = ?
+         ORDER BY timestamp ASC
+         LIMIT 1",
+    )
+    .bind(user_id)
+    .bind(stat_name)
+    .fetch_optional(pool)
+    .await
 }
 
 /// Look up a user by Discord ID within a specific guild.

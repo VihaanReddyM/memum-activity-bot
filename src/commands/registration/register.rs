@@ -6,7 +6,7 @@
 use time::OffsetDateTime;
 use tracing::{debug, info};
 
-use poise::serenity_prelude as serenity;
+use poise::serenity_prelude::{self as serenity, CreateEmbed};
 
 use crate::config::GuildConfig;
 use crate::database::queries;
@@ -122,7 +122,7 @@ pub async fn perform_registration(
         .unwrap_or_else(|_| "unknown".to_string());
 
     let db_user =
-        queries::register_user(&data.db, discord_user_id, &profile.id, guild_id_i64, &now)
+        queries::register_user(&data.db, discord_user_id, &profile.id, &profile.name, guild_id_i64, &now)
             .await?;
 
     let bw = &player_data.bedwars;
@@ -172,6 +172,13 @@ pub async fn register(
     )
     .await?;
 
-    ctx.say(msg).await?;
+    // Detect success by looking for the phrase we set in the success branch.
+    let success = msg.contains("You have been registered");
+    let embed = CreateEmbed::default()
+        .title(if success { "Registration Successful" } else { "Registration Failed" })
+        .color(if success { 0x00BFFF } else { 0xFF4444 })
+        .description(msg);
+
+    ctx.send(poise::CreateReply::default().embed(embed)).await?;
     Ok(())
 }

@@ -14,70 +14,9 @@ use poise::serenity_prelude::{self as serenity, CreateEmbed};
 use crate::config::GuildConfig;
 use crate::database::queries;
 use crate::shared::types::{Context, Error};
-
-// ---------------------------------------------------------------------------
-// Static stat definitions
-// ---------------------------------------------------------------------------
-
-struct BedwarsMode {
-    display: &'static str,
-    value: &'static str,
-}
-
-struct BedwarsMetric {
-    display: &'static str,
-    /// The raw Hypixel API suffix (e.g. `"wins_bedwars"`).
-    /// For overall this is the full key; for a specific mode it is appended to
-    /// the mode prefix: `"{mode}_{value}"`.
-    value: &'static str,
-}
-
-struct DiscordStat {
-    display: &'static str,
-    /// The raw stat name used in `discord_stats_snapshot`.
-    value: &'static str,
-}
-
-/// The six core Bedwars modes exposed to admins.
-const BEDWARS_MODES: &[BedwarsMode] = &[
-    BedwarsMode { display: "Overall",        value: "overall"     },
-    BedwarsMode { display: "Solo (8x1)",     value: "eight_one"   },
-    BedwarsMode { display: "Doubles (8x2)",  value: "eight_two"   },
-    BedwarsMode { display: "3v3v3v3 (4x3)", value: "four_three"  },
-    BedwarsMode { display: "4v4v4v4 (4x4)", value: "four_four"   },
-    BedwarsMode { display: "4v4 (2x4)",     value: "two_four"    },
-];
-
-/// Trackable Bedwars metrics. Each value is the raw Hypixel API suffix that is
-/// either used as-is (overall) or prefixed with the mode (per-mode).
-const BEDWARS_METRICS: &[BedwarsMetric] = &[
-    BedwarsMetric { display: "Wins",                    value: "wins_bedwars"                       },
-    BedwarsMetric { display: "Losses",                  value: "losses_bedwars"                     },
-    BedwarsMetric { display: "Games Played",            value: "games_played_bedwars"               },
-    BedwarsMetric { display: "Kills",                   value: "kills_bedwars"                      },
-    BedwarsMetric { display: "Deaths",                  value: "deaths_bedwars"                     },
-    BedwarsMetric { display: "Final Kills",             value: "final_kills_bedwars"                },
-    BedwarsMetric { display: "Final Deaths",            value: "final_deaths_bedwars"               },
-    BedwarsMetric { display: "Beds Broken",             value: "beds_broken_bedwars"                },
-    BedwarsMetric { display: "Beds Lost",               value: "beds_lost_bedwars"                  },
-    BedwarsMetric { display: "Winstreak",               value: "winstreak"                          },
-    BedwarsMetric { display: "Resources Collected",     value: "resources_collected_bedwars"        },
-    BedwarsMetric { display: "Iron Collected",          value: "iron_resources_collected_bedwars"   },
-    BedwarsMetric { display: "Gold Collected",          value: "gold_resources_collected_bedwars"   },
-    BedwarsMetric { display: "Diamond Collected",       value: "diamond_resources_collected_bedwars"},
-    BedwarsMetric { display: "Emerald Collected",       value: "emerald_resources_collected_bedwars"},
-    BedwarsMetric { display: "Items Purchased",         value: "items_purchased_bedwars"            },
-    BedwarsMetric { display: "Void Kills",              value: "void_kills_bedwars"                 },
-    BedwarsMetric { display: "Void Deaths",             value: "void_deaths_bedwars"                },
-];
-
-/// Discord activity stats that the bot currently tracks.
-/// These match the stat names used in `discord_stats_snapshot`.
-const DISCORD_STATS: &[DiscordStat] = &[
-    DiscordStat { display: "Messages Sent",  value: "messages_sent"  },
-    DiscordStat { display: "Reactions Given", value: "reactions_added" },
-    DiscordStat { display: "Commands Used",  value: "commands_used"  },
-];
+use crate::stats_definitions::{
+    display_name_for_key, BEDWARS_METRICS, BEDWARS_MODES, DISCORD_STATS,
+};
 
 // ---------------------------------------------------------------------------
 // Stat key construction
@@ -468,16 +407,73 @@ pub async fn list(ctx: Context<'_>) -> Result<(), Error> {
         return Ok(());
     }
 
-    let mut lines: Vec<String> = config
+    // Build sorted rows: (display_name, raw_key, xp_per_unit)
+    let mut rows: Vec<(String, String, f64)> = config
         .xp_config
         .iter()
-        .map(|(k, v)| format!("{k}: {v} XP/unit"))
+        .map(|(k, v)| (display_name_for_key(k), k.clone(), *v))
         .collect();
-    lines.sort();
+    rows.sort_by(|a, b| a.0.cmp(&b.0));
+
+    // Column widths (min width = header width)
+    const HDR_STAT: &str = "Stat";
+    const HDR_KEY: &str = "Raw Key";
+    const HDR_XP: &str = "XP/unit";
+
+    let col_stat = rows
+        .iter()
+        .map(|(d, _, _)| d.len())
+        .max()
+        .unwrap_or(0)
+        .max(HDR_STAT.len());
+    let col_key = rows
+        .iter()
+        .map(|(_, k, _)| k.len())
+        .max()
+        .unwrap_or(0)
+        .max(HDR_KEY.len());
+    let col_xp = rows
+        .iter()
+        .map(|(_, _, v)| format!("{:.0}", v).len())
+        .max()
+        .unwrap_or(0)
+        .max(HDR_XP.len());
+
+    // Separator line
+    let sep = format!(
+        "{}-+-{}-+-{}",
+        "-".repeat(col_stat),
+        "-".repeat(col_key),
+        "-".repeat(col_xp),
+    );
+
+    // Header
+    let header = format!(
+        "{:<col_stat$} | {:<col_key$} | {:>col_xp$}",
+        HDR_STAT, HDR_KEY, HDR_XP,
+    );
+
+    // Data rows
+    let data_lines: Vec<String> = rows
+        .iter()
+        .map(|(d, k, v)| {
+            format!(
+                "{:<col_stat$} | {:<col_key$} | {:>col_xp$.0}",
+                d, k, v,
+            )
+        })
+        .collect();
+
+    let table = format!(
+        "{}\n{}\n{}",
+        header,
+        sep,
+        data_lines.join("\n"),
+    );
 
     let embed = CreateEmbed::default()
-        .title("Configured XP Stats")
-        .description(format!("```\n{}\n```", lines.join("\n")))
+        .title(format!("XP Stats — {} configured", rows.len()))
+        .description(format!("```\n{}\n```", table))
         .color(0x00BFFF);
 
     ctx.send(poise::CreateReply::default().embed(embed)).await?;

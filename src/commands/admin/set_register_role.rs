@@ -1,7 +1,7 @@
 /// `/set-register-role` command — admin only.
 ///
 /// Sets the role that will be assigned to users when they register.
-use poise::serenity_prelude as serenity;
+use poise::serenity_prelude::{self as serenity, CreateEmbed};
 use tracing::{debug, info};
 
 use crate::config::GuildConfig;
@@ -16,7 +16,11 @@ pub async fn set_register_role(
 ) -> Result<(), Error> {
     // Inline admin check — replies ephemerally and exits if not authorised.
     if !ctx.data().config.admin_user_ids.contains(&ctx.author().id.get()) {
-        ctx.say("You do not have permission to use this command.").await?;
+        let embed = CreateEmbed::default()
+            .title("Permission Denied")
+            .color(0xFF4444)
+            .description("You do not have permission to use this command.");
+        ctx.send(poise::CreateReply::default().embed(embed)).await?;
         return Ok(());
     }
 
@@ -44,11 +48,14 @@ pub async fn set_register_role(
     let config_json = serde_json::to_string(&guild_config)?;
     queries::update_guild_config(&data.db, guild_id_i64, &config_json).await?;
 
-    ctx.say(format!(
-        "Registration role set to **{}**. New users will be assigned this role when they register.",
-        role.name
-    ))
-    .await?;
+    let embed = CreateEmbed::default()
+        .title("Registration Role Updated")
+        .color(0x00BFFF)
+        .description(format!(
+            "Registration role set to **{}**. New users will be assigned this role when they register.",
+            role.name
+        ));
+    ctx.send(poise::CreateReply::default().embed(embed)).await?;
 
     debug!("Finished handling /set-register-role");
 

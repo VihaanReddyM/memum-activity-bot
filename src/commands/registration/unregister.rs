@@ -1,6 +1,6 @@
 /// "/unregister" command.
 /// Unregisters the user by deleting their row from the database and removing the registered role (if they have it).
-use poise::serenity_prelude as serenity;
+use poise::serenity_prelude::{self as serenity, CreateEmbed};
 use tracing::info;
 
 use crate::config::GuildConfig;
@@ -49,11 +49,15 @@ pub async fn unregister(ctx: Context<'_>) -> Result<(), Error> {
 				guild_id = guild_id_i64,
 				"Registered role not found in guild, skipping role removal"
 			);
-			ctx.say(format!(
-				"You have been unregistered, but I couldn't find the registered role in the server. \
-				 Please ask an administrator to update the configuration and remove the role manually if desired."
-			))
-			.await?;
+            let embed = CreateEmbed::default()
+                .title("Unregistered")
+                .color(0xFFAA00)
+                .description(
+                    "You have been unregistered, but I couldn't find the registered role in \
+                     the server. Please ask an administrator to update the configuration and \
+                     remove the role manually if desired.",
+                );
+            ctx.send(poise::CreateReply::default().embed(embed)).await?;
 			return Ok(());
 		}
 
@@ -65,8 +69,11 @@ pub async fn unregister(ctx: Context<'_>) -> Result<(), Error> {
         }
     }
 
-    ctx.say("You have been successfully unregistered. Your stats will no longer be tracked.")
-        .await?;
+    let embed = CreateEmbed::default()
+        .title("Unregistered")
+        .color(0x00BFFF)
+        .description("You have been successfully unregistered. Your stats will no longer be tracked.");
+    ctx.send(poise::CreateReply::default().embed(embed)).await?;
 
     Ok(())
 }

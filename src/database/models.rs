@@ -28,6 +28,9 @@ pub struct DbUser {
     pub id: i64,
     pub discord_user_id: i64,
     pub minecraft_uuid: String,
+    /// Minecraft display name stored at registration time. `None` for rows that
+    /// pre-date migration 002.
+    pub minecraft_username: Option<String>,
     pub guild_id: i64,
     pub registered_at: String,
 }

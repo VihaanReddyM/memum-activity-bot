@@ -42,6 +42,20 @@ pub fn calculate_xp(deltas: &[StatDelta], config: &XPConfig) -> f64 {
     earned
 }
 
+/// Returns the *cumulative* XP threshold required to reach `level`.
+///
+/// This is the inverse companion of `calculate_level`. It uses the same
+/// formula: `threshold(level) = base_xp * ((level - 1) ^ exponent)`.
+///
+/// - `level == 1` always returns `0.0` (no XP required to be level 1).
+/// - Results are consistent with what `calculate_level` would produce.
+pub fn xp_for_level(level: i32, base_xp: f64, exponent: f64) -> f64 {
+    if level <= 1 {
+        return 0.0;
+    }
+    base_xp * ((level - 1) as f64).powf(exponent)
+}
+
 /// Calculate the user's level from total XP using an exponential curve.
 /// total_xp is the user's cumulative XP. base_xp is the XP required to reach level 2,
 /// exponent is the exponential scaling factor.
