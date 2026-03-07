@@ -405,8 +405,7 @@ pub async fn remove(
 #[poise::command(
     slash_command,
     guild_only,
-    ephemeral,
-    check = "crate::permissions::admin_check"
+    ephemeral
 )]
 pub async fn list(ctx: Context<'_>) -> Result<(), Error> {
     let guild_id = ctx
