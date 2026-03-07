@@ -128,11 +128,5 @@ pub async fn leaderboard_create(
         guild_id, channel_id
     );
 
-    // send a follow-up message that has the time when it was last updated (so the admin can see that it worked and know when it will update next)
-    // it will look something like this
-    //
-    // Last Fully Updated: <t:1724958002>
-    // -# This is the last updated date of the most outdated player data. Data for any player can be updated using the /tournament command.
-
     Ok(())
 }

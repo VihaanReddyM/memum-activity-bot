@@ -12,10 +12,6 @@ use crate::config::AppConfig;
 use crate::database::models::MessageValidationState;
 use crate::hypixel::client::HypixelClient;
 
-// ---------------------------------------------------------------------------
-// Poise type aliases
-// ---------------------------------------------------------------------------
-
 /// The error type used throughout the bot. We use a boxed trait object so that
 /// any error type that implements `std::error::Error + Send + Sync` can be
 /// propagated without manual conversion.
@@ -24,10 +20,6 @@ pub type Error = Box<dyn std::error::Error + Send + Sync>;
 /// Convenience alias for the Poise context, parameterized with our `Data` and
 /// `Error` types. Every slash-command handler receives this.
 pub type Context<'a> = poise::Context<'a, Data, Error>;
-
-// ---------------------------------------------------------------------------
-// Shared application data
-// ---------------------------------------------------------------------------
 
 /// Central data struct injected into every Poise command invocation.
 ///
@@ -50,10 +42,6 @@ pub struct Data {
     /// if a message is valid for XP (e.g. not a bot command, not a duplicate, etc.).
     pub message_validation: MessageValidationState,
 }
-
-// ---------------------------------------------------------------------------
-// StatDelta — universal stat-change representation
-// ---------------------------------------------------------------------------
 
 /// Represents a change in a single stat for a single user between two snapshots.
 ///

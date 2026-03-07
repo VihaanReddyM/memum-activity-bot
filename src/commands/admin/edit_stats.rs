@@ -19,10 +19,6 @@ use crate::utils::stats_definitions::{
     BEDWARS_METRICS, BEDWARS_MODES, DISCORD_STATS, display_name_for_key,
 };
 
-// ---------------------------------------------------------------------------
-// Stat key construction
-// ---------------------------------------------------------------------------
-
 /// Build the final stat key that gets stored in `xp_config`.
 ///
 /// - `overall` mode: the metric suffix is used directly (`"wins_bedwars"`).
@@ -34,10 +30,6 @@ fn build_stat_key(mode: &str, metric: &str) -> String {
         format!("{mode}_{metric}")
     }
 }
-
-// ---------------------------------------------------------------------------
-// Autocomplete helpers
-// ---------------------------------------------------------------------------
 
 /// Autocomplete for Bedwars mode selection.
 /// Returns the 6 core modes with friendly display names.
@@ -136,10 +128,6 @@ async fn autocomplete_configured_stat<'a>(
         .collect()
 }
 
-// ---------------------------------------------------------------------------
-// Shared guild config loader
-// ---------------------------------------------------------------------------
-
 async fn load_guild_config(ctx: &Context<'_>) -> Result<(i64, GuildConfig), Error> {
     let guild_id = ctx
         .guild_id()
@@ -157,10 +145,6 @@ async fn load_guild_config(ctx: &Context<'_>) -> Result<(i64, GuildConfig), Erro
     Ok((guild_id, config))
 }
 
-// ---------------------------------------------------------------------------
-// Parent command
-// ---------------------------------------------------------------------------
-
 /// Manage stat XP configuration for this server. Admin only.
 #[poise::command(
     slash_command,
@@ -171,10 +155,6 @@ async fn load_guild_config(ctx: &Context<'_>) -> Result<(i64, GuildConfig), Erro
 pub async fn edit_stats(_ctx: Context<'_>) -> Result<(), Error> {
     Ok(())
 }
-
-// ---------------------------------------------------------------------------
-// Subcommands
-// ---------------------------------------------------------------------------
 
 /// Add a Bedwars stat to the XP configuration by picking a mode and metric.
 ///

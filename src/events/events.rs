@@ -1,3 +1,7 @@
+// The only reason i added back the use of nicknames is because 
+// It is a better way for a user to register if they are already verified in the server
+// So i do beleive having the nickanme registration is a good UX improvment
+
 use poise::serenity_prelude as serenity;
 use tracing::{debug, warn};
 
@@ -72,9 +76,6 @@ async fn handle_register_button(
     let discord_id = component.user.id.get() as i64;
     let guild_id_i64 = guild_id.get() as i64;
 
-    // -------------------------------------------------------------------------
-    // Step 1 — Database lookup
-    // -------------------------------------------------------------------------
     let db_user = match queries::get_user_by_discord_id(&data.db, discord_id, guild_id_i64).await {
         Ok(u) => u,
         Err(e) => {
@@ -85,9 +86,6 @@ async fn handle_register_button(
         }
     };
 
-    // -------------------------------------------------------------------------
-    // Step 2 — Determine the registration path (pre-defer, cheap checks only)
-    // -------------------------------------------------------------------------
     let path = if let Some(user) = db_user {
         // User is already in the database with a stored username.
         if let Some(username) = user.minecraft_username {
@@ -112,9 +110,6 @@ async fn handle_register_button(
         }
     };
 
-    // -------------------------------------------------------------------------
-    // Step 3 — Defer the interaction before any further HTTP work
-    // -------------------------------------------------------------------------
     component
         .create_response(
             ctx,
@@ -124,9 +119,6 @@ async fn handle_register_button(
         )
         .await?;
 
-    // -------------------------------------------------------------------------
-    // Step 4 — Resolve the final Minecraft username
-    // -------------------------------------------------------------------------
     let minecraft_username: String = match path {
         RegistrationPath::WithUsername(u) => u,
 
@@ -198,9 +190,6 @@ async fn handle_register_button(
         }
     };
 
-    // -------------------------------------------------------------------------
-    // Step 5 — Run the shared registration pipeline
-    // -------------------------------------------------------------------------
     let result = perform_registration(
         ctx,
         data,
@@ -278,10 +267,6 @@ async fn resolve_nickname_path(
         }
     }
 }
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 /// Send an ephemeral direct response (only valid before any ack/defer).
 async fn respond_ephemeral(

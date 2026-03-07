@@ -53,7 +53,7 @@ pub async fn level(
     let target = user.as_ref().unwrap_or_else(|| ctx.author());
     let data = ctx.data();
 
-    // ── resolve registered user ───────────────────────────────────────────────
+    // resolve registered user
     let db_user =
         queries::get_user_by_discord_id(&data.db, target.id.get() as i64, guild_id_i64).await?;
 
@@ -72,7 +72,7 @@ pub async fn level(
         }
     };
 
-    // ── on-demand Hypixel refresh ─────────────────────────────────────────────
+    // on-demand Hypixel refresh
     // Stamps last_command_activity and refreshes Hypixel stats if the cooldown
     // has elapsed.  The command already deferred above so Discord's "thinking…"
     // indicator covers any API latency.
@@ -84,7 +84,7 @@ pub async fn level(
     )
     .await;
 
-    // ── XP & level data ───────────────────────────────────────────────────────
+    // XP & level data
     let xp_row = queries::get_xp(&data.db, db_user.id).await?;
     // Read both total_xp and the level stored by the pipeline.
     // The pipeline writes the correct level inside every transaction, so we
@@ -102,7 +102,7 @@ pub async fn level(
     let xp_this_level = total_xp - xp_at_level;
     let xp_for_next_level = xp_at_next - xp_at_level;
 
-    // ── guild config — which stats to show deltas for ─────────────────────────
+    // guild config — which stats to show deltas for
     let guild_row = queries::get_guild(&data.db, guild_id_i64).await?;
     let guild_config: GuildConfig = guild_row
         .as_ref()
@@ -115,7 +115,7 @@ pub async fn level(
         keys
     };
 
-    // ── compute stat deltas since registration ────────────────────────────────
+    // compute stat deltas since registration
     // "since registration" = latest snapshot − initial (registration-time) snapshot.
     // These are shown purely for cosmetic display on the level card.
     // XP is NOT recalculated here — it comes from the pipeline (xp.total_xp above).
@@ -164,7 +164,7 @@ pub async fn level(
     stat_deltas.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
     stat_deltas.truncate(8);
 
-    // ── fetch avatar ──────────────────────────────────────────────────────────
+    // fetch avatar
     let avatar_bytes = if let Some(tex) = &db_user.head_texture {
         if let Some(encoded) = tex.strip_prefix("data:image/png;base64,") {
             use base64::{engine::general_purpose, Engine as _};
@@ -176,7 +176,7 @@ pub async fn level(
         fetch_avatar(&db_user.minecraft_uuid).await
     };
 
-    // ── render level card ─────────────────────────────────────────────────────
+    // render level card
     let mc_name = match &db_user.minecraft_username {
         Some(name) => name.clone(),
         None => match data.hypixel.resolve_uuid(&db_user.minecraft_uuid).await {
@@ -199,7 +199,7 @@ pub async fn level(
     let png_bytes = level_card::render(&params);
     let attachment = CreateAttachment::bytes(png_bytes, "level_card.png");
 
-    // == SEND IMAGE ONLY (no embed) ===========================================
+    // SEND IMAGE 
     ctx.send(poise::CreateReply::default().attachment(attachment))
         .await?;
     

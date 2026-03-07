@@ -313,9 +313,6 @@ async fn apply_stat_deltas(
 
     let mut tx = pool.begin().await?;
 
-    // ------------------------------------------------------------------
-    // 1. Write stat_deltas + xp_events for every positive delta.
-    // ------------------------------------------------------------------
     // Build a lookup of XPReward by stat_name so we can pair rewards with
     // their corresponding delta row in a single pass.
     let reward_by_stat: std::collections::HashMap<&str, &crate::xp::calculator::XPReward> =
@@ -352,9 +349,6 @@ async fn apply_stat_deltas(
         }
     }
 
-    // ------------------------------------------------------------------
-    // 2. Atomically increment xp.total_xp and recalculate level.
-    // ------------------------------------------------------------------
     if total_earned > 0.0 {
         // Atomic XP increment protects against lost updates when multiple
         // sweeper loops process the same user concurrently.
@@ -420,9 +414,6 @@ async fn apply_stat_deltas(
         }
     }
 
-    // ------------------------------------------------------------------
-    // 3. Flush cursor updates (Discord sweeper only).
-    // ------------------------------------------------------------------
     for cursor in cursor_updates {
         queries::upsert_sweep_cursor_in_tx(
             &mut tx,
@@ -438,7 +429,7 @@ async fn apply_stat_deltas(
 
     tx.commit().await?;
 
-    // === Milestone hook =====================================================
+    // Milestone hook
     // Runs outside the transaction so a hook failure never rolls back XP.
     // The hook itself is currently a no-op but exists as an extension point.
     if let Some((old_level, new_level)) = level_up {

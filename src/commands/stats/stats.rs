@@ -27,7 +27,7 @@ pub async fn stats(
     let target = user.as_ref().unwrap_or_else(|| ctx.author());
     let data = ctx.data();
 
-    // ── resolve registered user ───────────────────────────────────────────────
+    // resolve registered user 
     let db_user =
         queries::get_user_by_discord_id(&data.db, target.id.get() as i64, guild_id_i64).await?;
 
@@ -46,7 +46,7 @@ pub async fn stats(
         }
     };
 
-    // ── on-demand Hypixel refresh ─────────────────────────────────────────────
+    // on-demand Hypixel refresh
     // Stamps last_command_activity and refreshes Hypixel stats if the cooldown
     // has elapsed.  The command already deferred above so Discord's "thinking…"
     // indicator covers any API latency.
@@ -58,7 +58,7 @@ pub async fn stats(
     )
     .await;
 
-    // ── load guild config to find active stats ────────────────────────────────
+    // load guild config to find active stats
     let guild_row = queries::get_guild(&data.db, guild_id_i64).await?;
     let guild_config: GuildConfig = guild_row
         .as_ref()
@@ -83,7 +83,7 @@ pub async fn stats(
         return Ok(());
     }
 
-    // ── fetch latest and initial snapshots, compute deltas ───────────────────
+    // fetch latest and initial snapshots, compute deltas
     let mc_name = match &db_user.minecraft_username {
         Some(name) => name.clone(),
         None => match data.hypixel.resolve_uuid(&db_user.minecraft_uuid).await {

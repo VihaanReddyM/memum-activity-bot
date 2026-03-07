@@ -131,7 +131,7 @@ impl BedwarsStats {
         }
     }
 
-    // Convenience accessors ------------------------------------------------
+    // Convenience accessors 
 
     pub fn wins(&self) -> f64 {
         self.stats.get("wins_bedwars").copied().unwrap_or(0.0)

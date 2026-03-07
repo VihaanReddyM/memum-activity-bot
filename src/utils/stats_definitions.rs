@@ -8,10 +8,6 @@
 /// Consumed by `edit_stats.rs` (autocomplete + validation) and
 /// `stats.rs` / `level.rs` (display labels).
 
-// ---------------------------------------------------------------------------
-// Structs
-// ---------------------------------------------------------------------------
-
 pub struct BedwarsMode {
     pub display: &'static str,
     pub value: &'static str,
@@ -30,10 +26,6 @@ pub struct DiscordStat {
     /// Raw stat name stored in `discord_stats_snapshot`.
     pub value: &'static str,
 }
-
-// ---------------------------------------------------------------------------
-// Static data
-// ---------------------------------------------------------------------------
 
 pub const BEDWARS_MODES: &[BedwarsMode] = &[
     BedwarsMode {
@@ -154,10 +146,6 @@ pub const DISCORD_STATS: &[DiscordStat] = &[
 
 /// Flat slice of Discord stat key strings for quick membership checks.
 pub const DISCORD_STAT_KEYS: &[&str] = &["messages_sent", "reactions_added", "commands_used"];
-
-// ---------------------------------------------------------------------------
-// Public helpers
-// ---------------------------------------------------------------------------
 
 /// Return a human-friendly display label for a raw stat key.
 ///

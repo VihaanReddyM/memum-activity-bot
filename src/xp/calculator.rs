@@ -27,10 +27,6 @@ impl Default for XPConfig {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Per-delta XP breakdown
-// ---------------------------------------------------------------------------
-
 /// The XP earned from a single stat delta, along with the multiplier that
 /// was active at calculation time.
 ///
