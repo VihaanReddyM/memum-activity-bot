@@ -3,15 +3,15 @@
 /// Shows a user's XP, level, progress to the next level, and stat changes
 /// since the last sweep.  Attaches a generated PNG level card image.
 use poise::serenity_prelude::{self as serenity, CreateAttachment, CreateEmbed};
-use tracing::{info, debug};
+use tracing::{debug, info};
 use uuid::Uuid;
 
 use crate::config::GuildConfig;
 use crate::database::queries;
 use crate::level_card::{self, LevelCardParams};
 use crate::shared::types::{Context, Error};
-use crate::utils::stats_definitions::{display_name_for_key, is_discord_stat};
 use crate::sweeper;
+use crate::utils::stats_definitions::{display_name_for_key, is_discord_stat};
 use crate::xp::calculator::xp_for_level;
 
 /// Fetch the player's Crafatar face avatar (80×80 px).
@@ -76,13 +76,7 @@ pub async fn level(
     // Stamps last_command_activity and refreshes Hypixel stats if the cooldown
     // has elapsed.  The command already deferred above so Discord's "thinking…"
     // indicator covers any API latency.
-    sweeper::refresh_hypixel_user_if_stale(
-        &data.db,
-        &data.hypixel,
-        &db_user,
-        &data.config,
-    )
-    .await;
+    sweeper::refresh_hypixel_user_if_stale(&data.db, &data.hypixel, &db_user, &data.config).await;
 
     // XP & level data
     let xp_row = queries::get_xp(&data.db, db_user.id).await?;
@@ -167,7 +161,7 @@ pub async fn level(
     // fetch avatar
     let avatar_bytes = if let Some(tex) = &db_user.head_texture {
         if let Some(encoded) = tex.strip_prefix("data:image/png;base64,") {
-            use base64::{engine::general_purpose, Engine as _};
+            use base64::{Engine as _, engine::general_purpose};
             general_purpose::STANDARD.decode(encoded).ok()
         } else {
             None
@@ -184,8 +178,15 @@ pub async fn level(
             Err(_) => db_user.minecraft_uuid.to_string(),
         },
     };
-    
+
     let rank = queries::get_user_rank_in_guild(&data.db, db_user.id, guild_id_i64).await?;
+
+    let milestones = queries::get_milestones(&data.db, guild_id_i64).await?;
+    let user_level = level; // already fetched in your code
+    let milestone_progress: Vec<(i32, bool)> = milestones
+        .iter()
+        .map(|m| (m.level, user_level >= m.level))
+        .collect();
 
     let params = LevelCardParams {
         minecraft_username: mc_name,
@@ -197,19 +198,20 @@ pub async fn level(
         xp_gained,
         avatar_bytes,
         rank,
+        milestone_progress,
     };
 
     let png_bytes = level_card::render(&params);
     let attachment = CreateAttachment::bytes(png_bytes, "level_card.png");
 
-    // SEND IMAGE 
+    // SEND IMAGE
     ctx.send(poise::CreateReply::default().attachment(attachment))
         .await?;
-    
+
     info!(
-		"Sent level card for user {} (Discord ID {}, Minecraft username {:#?}) in guild {}",
-		target.name, target.id, db_user.minecraft_username, guild_id
-	);
+        "Sent level card for user {} (Discord ID {}, Minecraft username {:#?}) in guild {}",
+        target.name, target.id, db_user.minecraft_username, guild_id
+    );
 
     Ok(())
 }

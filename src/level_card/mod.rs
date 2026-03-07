@@ -56,6 +56,8 @@ pub struct LevelCardParams {
     pub avatar_bytes: Option<Vec<u8>>,
     /// Rank of the user in the guild by total XP, if available.
     pub rank: Option<i64>,
+
+    pub milestone_progress: Vec<(i32, bool)>, // (milestone level, achieved)
 }
 
 /// Render the level card and return the PNG bytes.
@@ -128,31 +130,31 @@ pub fn render(params: &LevelCardParams) -> Vec<u8> {
         2,
         CYAN,
     );
-    
+
     let rank_colour = if let Some(rank) = params.rank {
-		if rank == 1 {
-			GOLD
-		} else if rank <= 3 {
-			GREEN
-		} else {
-			MUTED
-		}
-	} else {
-		MUTED
-	};
-    
+        if rank == 1 {
+            GOLD
+        } else if rank <= 3 {
+            GREEN
+        } else {
+            MUTED
+        }
+    } else {
+        MUTED
+    };
+
     // "RANK #{rank}": scale=2, GOLD (if rank is available)
-	if let Some(rank) = params.rank {
-		render_text(
-			&font,
-			&mut img,
-			124,
-			92,
-			&format!("RANK #{}", rank),
-			2,
-			rank_colour,
-		);
-	}
+    if let Some(rank) = params.rank {
+        render_text(
+            &font,
+            &mut img,
+            124,
+            92,
+            &format!("RANK #{}", rank),
+            2,
+            rank_colour,
+        );
+    }
 
     // == PROGRESS BAR ========================================================
     // Bar background (rounded)
@@ -171,6 +173,8 @@ pub fn render(params: &LevelCardParams) -> Vec<u8> {
         fill_rounded_rect(&mut img, 28, 120, clamped_w, 18, 9, CYAN);
     }
 
+    let percentage_complete = params.xp_this_level / params.xp_for_next_level * 100.0;
+
     // XP text below bar: scale=2, MUTED
     render_text(
         &font,
@@ -178,8 +182,8 @@ pub fn render(params: &LevelCardParams) -> Vec<u8> {
         28,
         146,
         &format!(
-            "{:.0} / {:.0} XP",
-            params.xp_this_level, params.xp_for_next_level
+            "{:.0} / {:.0} XP ({:.1}%)",
+            params.xp_this_level, params.xp_for_next_level, percentage_complete
         ),
         2,
         MUTED,
@@ -190,7 +194,7 @@ pub fn render(params: &LevelCardParams) -> Vec<u8> {
 
     // == BOTTOM SECTION (Stat Changes) =======================================
     // Header
-    render_text(&font, &mut img, 28, 188, "STAT CHANGES", 2, MUTED);
+    render_text(&font, &mut img, 28, 188, "STAT CHANGES", 2, CYAN);
 
     // Stats in two columns (up to 4 per column, 8 total)
     if params.stat_deltas.is_empty() {
@@ -210,11 +214,85 @@ pub fn render(params: &LevelCardParams) -> Vec<u8> {
         }
     }
 
+    // == MILESTONE BADGES =======================================================
+    let milestones_x = 540;
+    let milestones_y = 188;
+    render_text(
+        &font,
+        &mut img,
+        milestones_x,
+        milestones_y,
+        "MILESTONES",
+        2,
+        CYAN,
+    );
+
+    let max_milestones = 8;
+    let col1_x = milestones_x;
+    let col2_x = milestones_x + 200;
+    let base_y = milestones_y + 26;
+    let row_step = 22;
+    
+
+    // This part took me fucking ages bro
+    // OMG I HATE THIS SO MUCH
+    // The calculation of percentage for each milestone
+    // was a pain in the ass. i want a extra for this part on god.
+    // Its either this was actually hard or i suck balls at programming (its probably the second one)
+    let xp_pct = if params.xp_for_next_level > 0.0 {
+        (params.xp_this_level / params.xp_for_next_level).clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
+    let current_fractional_level = params.level as f64 + xp_pct;
+
+    for (i, (m_level, reached)) in params
+        .milestone_progress
+        .iter()
+        .take(max_milestones)
+        .enumerate()
+    {
+        let column = i / 4;
+        let row = i % 4;
+        let x = if column == 0 { col1_x } else { col2_x };
+        let y = base_y + (row as u32) * row_step;
+
+        let m_level_f = *m_level as f64;
+                
+        let percentage = if let Some((next_m_tuple, _)) = params.milestone_progress.get(i + 1) {
+            let next_m_f = *next_m_tuple as f64;
+            
+            if current_fractional_level >= next_m_f {
+                100
+            } else if current_fractional_level < m_level_f {
+                0
+            } else {
+                (((current_fractional_level - m_level_f) / (next_m_f - m_level_f)) * 100.0).round() as i32
+            }
+        } else {
+            if params.level >= *m_level { 100 } else { 0 }
+        };
+
+        // Milestone is "Achieved" (Green) if the level is met or exceeded.
+        // It stays "Muted" if the player is still progressing toward or hasn't reached it.
+        let color = if *reached { GREEN } else { MUTED };
+
+        render_text(
+            &font,
+            &mut img,
+            x,
+            y,
+            &format!("Level {} ({}%)", m_level, percentage),
+            2,
+            color,
+        );
+    }
+
     // == XP GAINED (right-aligned to x=972) ==================================
     let xp_text = format!("+{:.0} XP GAINED", params.xp_gained);
     let text_w = measure_text(&font, &xp_text, 2);
     let xp_x = 972u32.saturating_sub(text_w);
-    render_text(&font, &mut img, xp_x, 310, &xp_text, 2, GOLD);
+    render_text(&font, &mut img, xp_x, 146, &xp_text, 2, MUTED);
 
     // == ENCODE PNG ===========================================================
     let mut buf: Vec<u8> = Vec::new();
