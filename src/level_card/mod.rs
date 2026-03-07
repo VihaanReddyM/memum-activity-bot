@@ -258,24 +258,32 @@ pub fn render(params: &LevelCardParams) -> Vec<u8> {
         let y = base_y + (row as u32) * row_step;
 
         let m_level_f = *m_level as f64;
-                
-        let percentage = if let Some((next_m_tuple, _)) = params.milestone_progress.get(i + 1) {
+
+        let percentage = if i == 0 {
+            // first milestone: 0 -> milestone
+            ((current_fractional_level / m_level_f) * 100.0)
+                .clamp(0.0, 100.0)
+                .round() as i32
+        } else if let Some((next_m_tuple, _)) = params.milestone_progress.get(i + 1) {
             let next_m_f = *next_m_tuple as f64;
-            
+
             if current_fractional_level >= next_m_f {
                 100
             } else if current_fractional_level < m_level_f {
                 0
             } else {
-                (((current_fractional_level - m_level_f) / (next_m_f - m_level_f)) * 100.0).round() as i32
+                (((current_fractional_level - m_level_f) / (next_m_f - m_level_f)) * 100.0).round()
+                    as i32
             }
         } else {
             if params.level >= *m_level { 100 } else { 0 }
         };
 
-        // Milestone is "Achieved" (Green) if the level is met or exceeded.
-        // It stays "Muted" if the player is still progressing toward or hasn't reached it.
-        let color = if *reached { GREEN } else { MUTED };
+        let color = if percentage > 0 {
+            if *reached { GREEN } else { WHITE }
+        } else {
+            MUTED
+        };
 
         render_text(
             &font,
