@@ -124,6 +124,9 @@ pub fn render(params: &LeaderboardCardParams) -> Vec<u8> {
     let header_x = MARGIN;
     let header_y = MARGIN;
     let header_w = IMG_W - MARGIN * 2;
+    
+    let level_column_center = header_x + 700;
+    let xp_column_center = header_x + header_w - 120;
 
     // Title: "LEADERBOARD"
     render_text(
@@ -138,22 +141,23 @@ pub fn render(params: &LeaderboardCardParams) -> Vec<u8> {
 
     // == COLUMN HEADERS =======================================================
     let col_header_y = header_y + HEADER_H + 10;
-
-    // Column titles
+    
+    let level_header = "Level";
+    let level_header_w = measure_text(&font, level_header, 3);
+    
     render_text(
         &font,
         &mut img,
-        header_x + 680,
+        level_column_center - level_header_w / 2,
         col_header_y,
-        "Level",
+        level_header,
         3,
         MUTED,
     );
-
+    
     let xp_header = "XP";
     let xp_header_w = measure_text(&font, xp_header, 3);
-    let xp_column_center = header_x + header_w - 120;
-
+    
     render_text(
         &font,
         &mut img,
@@ -163,7 +167,6 @@ pub fn render(params: &LeaderboardCardParams) -> Vec<u8> {
         3,
         MUTED,
     );
-
     // == ROWS =================================================================
     let rows_start_y = col_header_y + 28;
 
@@ -278,19 +281,24 @@ pub fn render(params: &LeaderboardCardParams) -> Vec<u8> {
             text_scale,
             name_col,
         );
+        
+        let level_text = format!("{}", row.level);
+        let level_w = measure_text(&font, &level_text, text_scale);
+        
+        let level_column_center = header_x + 700;
+        let level_x = level_column_center - level_w / 2;
 
         // Level
         let level_text = format!("{}", row.level);
         render_text(
             &font,
             &mut img,
-            header_x + 700,
+            level_x,
             row_y + 14,
             &level_text,
             text_scale,
             CYAN,
         );
-
         // XP right aligned
         let xp_text = format_xp(row.total_xp);
         let xp_w = measure_text(&font, &xp_text, 3);
